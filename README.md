@@ -1,2 +1,9 @@
 # minecraft_bedrock_server_remote
  
+Place you bedrock server files on the ./server directory.
+
+You can use the bat file or execute the `node .` command to start the server.
+
+Then the server terminal will be routed to `localhost:3001`
+
+![Demo Iamge]()
