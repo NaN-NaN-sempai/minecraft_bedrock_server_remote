@@ -2,6 +2,7 @@ const express = require("express");
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(express.static('src'));
 
 const http = require('http');
 const server = http.createServer(app);
@@ -22,42 +23,73 @@ let stdoutText = "";
 
 app.get('/', (req, res) => {
     res.sendFile(__dirname + "/index.html");
-})
+});
+
 app.get('/getStdout', (req, res) => {
     res.send(stdoutText);
-})
-app.get('/socket.io.js', (req, res) => {
-    res.sendFile(__dirname + "/socket.io.js");
-})
+});
 
 io.on('connection', (socket) => {});
 
 app.post('/api', upload.none(), (req, res) => {
-    sendMessage(req.body.ipt);
-})
+    let {visitorColor, visitorId, command, visitorColorContrast} = req.body;
+
+    let date = new Date();
+    
+    var timeString = date.toString().slice(16, 24);
+    let stringDate = date.toLocaleDateString("en-US").slice(0, 5) + " - " + timeString;
+
+    stdoutText += /* html */`
+    <br>
+    <br>
+    <span class="userInput" style="--color: ${visitorColor}; --contrast: ${visitorColorContrast}" title="${stringDate}">
+
+        [<div class="userName">${visitorId}</div>] => "<span class="command" style="user-select: all">${command}</span>"
+
+    </span>
+    <br>`;
+    sendMessage(req.body.command);
+});
 
 server.listen(port, () => console.log(`Listening on port ${port}`));
-
-
 
 const sendMessage = (t) => {
     var stdinStream = new stream.Readable({ read() { } });
     stdinStream.push(t + '\n'); 
-    stdinStream.pipe(child.stdin);
+    stdinStream.pipe(terminal.stdin);
 }
 
 const { spawn } = require('child_process');
 
-const child = spawn('./server/bedrock_server.exe');
+const terminal = spawn('./server/bedrock_server.exe');
     
-child.stdin.setEncoding('utf-8');
-child.stdout.pipe(process.stdout);
+terminal.stdin.setEncoding('utf-8');
+terminal.stdout.pipe(process.stdout);
 
-child.stdout.on('data', (data) => {
-    stdoutText += data.toString() + "\n";
+
+terminal.stdout.on('data', (data) => { 
+
+    let fullText = data.toString();
+    let text = fullText.split("\n");
+
+    let date = new Date();
+
+    let sryledText = text.map(s => {
+        if(s.startsWith("[")){
+            let aux = s.slice(s.indexOf("]")+1, s.length);
+            var timeString = date.toString().slice(16, 24);
+            let stringDate = date.toLocaleDateString("en-US").slice(0, 5) + " - " + timeString;
+
+            return `<span title="${stringDate}"> [stdout] -> ${aux} </span>`;
+        }
+        else return s;
+    }).join("<br>");
+    
+
+    stdoutText += sryledText;
     io.emit('stdout', stdoutText); 
 });
 
-child.on('exit', (code) => {
+terminal.on('exit', (code) => {
     console.log(`Child exited with code ${code}`);
 });

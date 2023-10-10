@@ -1,31 +1,76 @@
-<textarea id="stdout" readonly></textarea>
-<br>
-<form method="post" action="api">
-    <div class="send">
-        <input class="text" autocomplete="off" type="text" name="ipt">
-        <br>
-        <br>
-        <input class="send" type="submit" value="Enviar">
-    </div>
-</form>
+<div class="app">
+    <div id="stdout" readonly></div> 
+    <form method="post" action="api">
+        <div class="send">
+            <input class="text" autocomplete="off" type="text" name="command"> 
+            <input class="button" type="submit" value="Enviar">
+        </div>
+    </form>
+</div>
 
-<script src="socket.io.js"></script>
+<script src="/scripts/socket.io.js"></script>
 <script>    
     let form = document.querySelector("form");
     let stdout = document.querySelector("#stdout");
 
     let setupText = (t) => {
-        stdout.value = t;
+        stdout.innerHTML = t;
         stdout.scrollTop = stdout.scrollHeight;
     }
 
+    const stringToColour = (str) => {
+        let hash = 0;
+        str.split('').forEach(char => {
+            hash = char.charCodeAt(0) + ((hash << 5) - hash)
+        })
+        let colour = '#'
+        for (let i = 0; i < 3; i++) {
+            const value = (hash >> (i * 8)) & 0xff
+            colour += value.toString(16).padStart(2, '0')
+        }
+        return colour
+    }
 
-    form.addEventListener("submit", (event) => {
-        event.preventDefault(); 
+    function hexToRgb(hex) {
+        var m = hex.match(/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
+        return [
+            parseInt(m[1], 16),
+            parseInt(m[2], 16),
+            parseInt(m[3], 16)
+        ];
+    }
+    function setContrast(rgb) {
+        const brightness = Math.round(((parseInt(rgb[0]) * 299) +
+                            (parseInt(rgb[1]) * 587) +
+                            (parseInt(rgb[2]) * 114)) / 1000);
+
+        return (brightness > 125) ? 'black' : 'white';
+    }
+
+    let visitorId;
+    let color;
+    let contrastColor;
+
+    form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+
+        if(!visitorId){
+            let FingerprintJS = await import('https://openfpcdn.io/fingerprintjs/v4');
+            let fp = await FingerprintJS.load();
+            let result = await fp.get();
+            visitorId = result.visitorId; 
+            color = stringToColour(visitorId);
+            contrastColor = setContrast(hexToRgb(color));
+        }
+
+        let formData = new FormData(form);
+        formData.set("visitorId", visitorId);
+        formData.set("visitorColor", color);
+        formData.set("visitorColorContrast", contrastColor);
 
         fetch("api", {
             method: "post",
-            body: new FormData(form)
+            body: formData
         })
     });
 
@@ -46,25 +91,116 @@
 
 
 <style>
+    :root {
+        --borderRadius: 10px; 
+    }
     * {
         margin: 0;
         padding: 0;
+        outline: none;
         background: black;
         color: white;
+        font-size: 15px;
     }
-    input, textarea {
-        border: none;
-        outline: 1px solid white;
+    .app {
+        max-width: 100%;
+        padding: 10px;
+    }
+    #stdout {
+        overflow: hidden scroll;
+        padding: 10px;
+        border-radius:var(--borderRadius) var(--borderRadius) 0 0;
+    }
+    input, #stdout {
+        border: 2px solid white;
     }
     input { 
-        padding: 5px;
+        padding: 10px;
     }
     .text {
         width: 100%;
+        border-top: none;
+        border-radius: 0 0 var(--borderRadius) var(--borderRadius);
     }
-    textarea {
-        width: 100%;
-        height: 500px;
-        resize: vertical
+    .button {
+        margin-top: 10px;
+        border-radius: var(--borderRadius);
+        cursor: pointer;
+    }
+    .button:hover {
+        background: white;
+        color: black;
+    }
+
+
+
+    #stdout {
+        max-width: 100%; 
+        height: 85%;
+        resize: vertical;
+        line-height: 1.5; 
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bolder;
+    }
+    
+    #stdout .userInput,
+    #stdout .userTime,
+    #stdout .command,
+    #stdout .time {
+        background: var(--color) !important;
+        padding: 2px;
+        border-radius: 5px;
+    }
+
+    #stdout .userInput {
+        display: flex; 
+    }
+    #stdout .userName {
+        display: block;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+        width: 30px;
+        background: var(--color);
+        --padding: 12px;
+        padding: 0 var(--padding) 0 var(--padding);
+        transition: width 1s, padding 1s;
+        user-select: all;
+    }
+    #stdout .userName:hover {
+        width: 290px;
+        padding: 0 0 0 0;
+    }
+    
+    /* width */
+    #stdout::-webkit-scrollbar {
+        width: 12px;
+    }
+
+    /* Track */
+    #stdout::-webkit-scrollbar-track {
+        background: transparent; 
+    }
+    
+    /* Handle */
+    #stdout::-webkit-scrollbar-thumb {
+        background: linear-gradient(to bottom, 
+            white 90%, black
+        );
+        border-radius: 20px 20px 0 0;
+    }
+
+    /* Handle on hover */
+    #stdout::-webkit-scrollbar-thumb:hover { 
+        background: #808080; 
+    }
+
+    #stdout::-webkit-resizer { 
+        background: linear-gradient(to bottom, 
+            black, white
+        );
+        cursor: pointer;
+        width: 200px !important;
+        height: 200px !important;
     }
 </style>
