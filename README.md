@@ -8,6 +8,6 @@ Then the server terminal will be routed to `localhost:3001`
 
 <div align="center">
 
-![Demo Iamge](https://raw.githubusercontent.com/NaN-NaN-sempai/minecraft_bedrock_server_remote/main/demo.png)
+![Demo Iamge](https://raw.githubusercontent.com/NaN-NaN-sempai/minecraft_bedrock_server_remote/main/src/images/demo.png)
 
 </div>
