@@ -1,7 +1,13 @@
-<title>Minecraft Server Remote Control</title>
-<link rel="shortcut icon" href="icon/logo.png" type="image/x-icon">
-
-
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"><title>Minecraft Server Remote Control</title>
+    <link rel="shortcut icon" href="icon/logo.png" type="image/x-icon">
+    <link rel="stylesheet" href="style/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    
 <div class="app">
     <div id="stdout" readonly></div> 
     <form method="post" action="api">
@@ -12,10 +18,21 @@
     </form>
 </div>
 
+</body>
+
 <script src="/scripts/socket.io.js"></script>
 <script>    
     let form = document.querySelector("form");
+    let input = form.querySelector(".text");
     let stdout = document.querySelector("#stdout");
+
+    const changeColor = (color) => {
+        document.documentElement.style.setProperty('--borderColor', color);
+    }
+    if(!localStorage.getItem("hasPermission")) {
+        changeColor("yellow");
+    }
+    
 
     let setupText = (t) => {
         stdout.innerHTML = t;
@@ -34,7 +51,6 @@
         }
         return colour
     }
-
     function hexToRgb(hex) {
         var m = hex.match(/^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i);
         return [
@@ -55,8 +71,45 @@
     let color;
     let contrastColor;
 
+    let lastCommands = [];
+    let lastCommandTemp = "";
+    let lastCommandIndex = 0;
+
+    input.addEventListener("keydown", evt => {
+        let {key} = evt; 
+
+        if(key == "ArrowUp" || key == "ArrowDown"){
+            evt.preventDefault();
+            if(key == "ArrowUp") 
+                lastCommandIndex = lastCommandIndex - 1 < 0? 0: lastCommandIndex - 1;
+            else
+                lastCommandIndex = lastCommandIndex + 1 > lastCommands.length? lastCommands.length: lastCommandIndex + 1;
+
+            console.log(lastCommandIndex, lastCommands[lastCommandIndex], lastCommands);
+
+            if(lastCommands[lastCommandIndex])
+                input.value = lastCommands[lastCommandIndex];
+            else
+                input.value = lastCommandTemp;
+
+        }
+        
+    })
     form.addEventListener("submit", async (event) => {
         event.preventDefault();
+        let text = form.querySelector(".text").value;
+
+        if(text == "adminUnlock"){
+            localStorage.setItem("hasPermission", true)
+            changeColor("white");
+            input.value = "";
+            return alert("Unlocked");
+        }
+        
+        if(!localStorage.getItem("hasPermission")) {
+            return alert("You are not allowed to use commands.");
+        }
+
 
         if(!visitorId){
             let FingerprintJS = await import('https://openfpcdn.io/fingerprintjs/v4');
@@ -72,10 +125,14 @@
         formData.set("visitorColor", color);
         formData.set("visitorColorContrast", contrastColor);
 
-        fetch("api", {
+        fetch("sendInput", {
             method: "post",
             body: formData
         })
+
+        lastCommands.push(input.value);
+        lastCommandIndex = lastCommands.length;
+        lastCommandTemp = input.value = "";
     });
 
     fetch("getStdout", {
@@ -92,120 +149,4 @@
         setupText(msg);
     });
 </script>
-
-
-<style>
-    :root {
-        --borderRadius: 10px; 
-    }
-    * {
-        margin: 0;
-        padding: 0;
-        outline: none;
-        background: black;
-        color: white;
-        font-size: 15px;
-    }
-    .app {
-        max-width: 100%;
-        padding: 10px;
-    }
-    #stdout {
-        overflow: hidden scroll;
-        padding: 10px;
-        border-radius:var(--borderRadius) var(--borderRadius) 0 0;
-    }
-    input, #stdout {
-        border: 2px solid white;
-    }
-    input { 
-        padding: 10px;
-    }
-    .text {
-        width: 100%;
-        border-top: none;
-        border-radius: 0 0 var(--borderRadius) var(--borderRadius);
-    }
-    .button {
-        margin-top: 10px;
-        border-radius: var(--borderRadius);
-        cursor: pointer;
-    }
-    .button:hover {
-        background: white;
-        color: black;
-    }
-
-
-
-    #stdout {
-        max-width: 100%; 
-        height: 85%;
-        resize: vertical;
-        line-height: 1.5; 
-        font-family: 'Courier New', Courier, monospace;
-        font-weight: bolder;
-    }
-    
-    #stdout .userInput,
-    #stdout .userTime,
-    #stdout .command,
-    #stdout .time {
-        background: var(--color) !important;
-        padding: 2px;
-        border-radius: 5px;
-    }
-
-    #stdout .userInput {
-        display: flex; 
-        align-items: center; 
-    }
-    #stdout .userName {
-        display: block;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        overflow: hidden;
-        width: 30px;
-        background: var(--color);
-        --padding: 12px;
-        padding: 0 var(--padding) 0 var(--padding);
-        transition: width 1s, padding 1s;
-        user-select: all;
-    }
-    #stdout .userName:hover {
-        width: 290px;
-        padding: 0 0 0 0;
-    }
-    
-    /* width */
-    #stdout::-webkit-scrollbar {
-        width: 12px;
-    }
-
-    /* Track */
-    #stdout::-webkit-scrollbar-track {
-        background: transparent; 
-    }
-    
-    /* Handle */
-    #stdout::-webkit-scrollbar-thumb {
-        background: linear-gradient(to bottom, 
-            white 90%, black
-        );
-        border-radius: 20px 20px 0 0;
-    }
-
-    /* Handle on hover */
-    #stdout::-webkit-scrollbar-thumb:hover { 
-        background: #808080; 
-    }
-
-    #stdout::-webkit-resizer { 
-        background: linear-gradient(to bottom, 
-            black, white
-        );
-        cursor: pointer;
-        width: 200px !important;
-        height: 200px !important;
-    }
-</style>
+</html>

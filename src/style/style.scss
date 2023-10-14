@@ -1,0 +1,120 @@
+
+:root {
+    --borderRadius: 10px;
+    --borderColor: white;
+}
+* {
+    margin: 0;
+    padding: 0;
+    outline: none;
+    background: black;
+    color: white;
+    font-size: 15px;
+} 
+.app {
+    max-width: 100%;
+    height: 100%;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+
+    
+    input, #stdout {
+        border: 2px solid var(--borderColor);
+    }
+    #stdout {
+        overflow: hidden scroll;
+        padding: 10px;
+        border-radius:var(--borderRadius) var(--borderRadius) 0 0;
+        max-width: 100%;  
+        height: 90vh; 
+        resize: none;
+        line-height: 1.5; 
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bolder;
+
+        .userInput,
+        .userTime,
+        .command,
+        .time {
+            background: var(--color) !important;
+            padding: 2px;
+            border-radius: 5px;
+        }
+        .userInput {
+            display: flex; 
+            align-items: center; 
+        }
+        .userTime {
+            display: flex; 
+            align-items: center; 
+        }
+        .title {
+            display: block;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+            max-width: 30px;
+            background: var(--color);
+            --padding: 12px;
+            padding: 0 var(--padding) 0 var(--padding);
+            transition: max-width .5s, padding .1s linear;
+            user-select: all;
+        }
+        .title:hover {
+            max-width: 400px;
+            padding: 0 0 0 0;
+        }
+    }
+
+    .send {
+        display: grid;
+        grid-template-areas: 'text text text text text btn';
+
+        .text { 
+            grid-area: text;
+            padding: 10px;
+
+            border-radius: 0 0 0 var(--borderRadius);
+    
+            &.text {
+                border-top: none; 
+            }
+        }
+        .button { 
+            grid-area: btn;
+            cursor: pointer;
+            border-top: none; 
+            border-radius: 0 0 var(--borderRadius) 0;
+        }
+        .button:hover {
+            background: var(--borderColor);
+            color: black;
+        } 
+    }
+}
+
+/* width */
+#stdout::-webkit-scrollbar {
+    width: 12px;
+}
+
+/* Track */
+#stdout::-webkit-scrollbar-track {
+    background: transparent; 
+} 
+
+/* Handle */
+#stdout::-webkit-scrollbar-thumb {
+    background: linear-gradient(to bottom, 
+        var(--borderColor) 90%, black
+    );
+    border-radius: 20px 20px 0 0;
+}
+
+/* Handle on hover */
+#stdout::-webkit-scrollbar-thumb:hover {  
+    background: linear-gradient(to bottom, 
+        #808080 90%, black
+    );
+} 

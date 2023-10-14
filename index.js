@@ -19,6 +19,7 @@ const stream = require('stream');
 let port = 3001;
 
 
+let stdoutRawText = "";
 let stdoutText = "";
 
 app.get('/', (req, res) => {
@@ -34,12 +35,18 @@ io.on('connection', (socket) => {});
 app.post('/api', upload.none(), (req, res) => {
     let {visitorColor, visitorId, command, visitorColorContrast} = req.body;
 
+    let usageObject = req.body;
+
+    usageObject.isUserInput = true;
+
     let date = new Date();
     
     var timeString = date.toString().slice(16, 24);
     let stringDate = date.toLocaleDateString("en-US").slice(0, 5) + " - " + timeString;
 
-    stdoutText += /* html */`
+    let a = "";
+
+    a += /* html */`
     <br>
     <br>
     <span class="userInput" style="--color: ${visitorColor}; --contrast: ${visitorColorContrast}" title="${stringDate}">
@@ -48,6 +55,8 @@ app.post('/api', upload.none(), (req, res) => {
 
     </span>
     <br>`;
+
+    stdoutRawText += `stopt{${JSON.stringify(usageObject)}}enopt [${visitorId}] ${command}\r\n`;
     sendMessage(req.body.command);
 });
 
@@ -68,27 +77,60 @@ terminal.stdout.pipe(process.stdout);
 
 
 terminal.stdout.on('data', (data) => { 
-
     let fullText = data.toString();
-    let text = fullText.split("\n");
+    stdoutRawText += fullText
+        .replaceAll("&","&amp")
+        .replaceAll("<","&lt")
+        .replaceAll(">","&gt");
+    let text = stdoutRawText.split("\r\n");
 
-    let date = new Date();
+    let sryledText = text.map(s => {   
+        let userObject = {};
+        let matchUsr = s.match(/^stopt{.*}enopt /gm);
+        if(matchUsr) {
+            let obj = matchUsr[0]
+                .replace("stopt{", "")
+                .replace("}enopt ", "");
+                
+                userObject = JSON.parse(obj);
 
-    let sryledText = text.map(s => {
-        if(s.startsWith("[")){
-            let aux = s.slice(s.indexOf("]")+1, s.length);
-            var timeString = date.toString().slice(16, 24);
-            let stringDate = date.toLocaleDateString("en-US").slice(0, 5) + " - " + timeString;
+            s = s.replace(matchUsr[0],"");
+        } 
+        
+        let match = s.match(/^\[.*] /gm);
+        if(!match) return s+"<BR>";
 
-            return `<span title="${stringDate}"> [stdout] -> ${aux} </span>`;
+        let title = match[0].slice(1, match[0].length-2)
+
+        let text = s.replace(match[0], "");
+        let html = /* html */ `
+            <span class="userInput">
+                [<div class="title">${title} </div> <span>] ${text? "~> "+text: ""}</span>
+            </span>
+        `;
+
+        if(userObject.isUserInput){
+            with(userObject){
+
+                html = /* html */ `
+                    <br>
+                    <br>
+                    <span class="userInput" style="--color: ${visitorColor}; --contrast: ${visitorColorContrast}">
+                        [<div class="title">${title} </div>] => "⠀ <span class="command" style="user-select: all">  ${text} </span> ⠀"
+                    </span>
+                    <br>
+                `;
+            }
         }
-        else return s;
-    }).join("<br>");
-    
 
-    stdoutText += sryledText;
-    io.emit('stdout', stdoutText); 
+        return html;
+    }).join("");
+    
+    stdoutText = sryledText;
+    io.emit('stdout', sryledText); 
 });
+
+
 
 terminal.on('exit', (code) => {
     console.log(`Child exited with code ${code}`);
