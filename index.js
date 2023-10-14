@@ -1,3 +1,12 @@
+let mcServerIp = '100.93.51.24';
+let mcServerPort = 19132;
+let mcServerRelayPort = 3002;
+let remoteTerminalPort = 3001;
+
+const mcterminal = require("./module/mcterminal");
+const mcServer = new mcterminal();
+
+
 const express = require("express");
 const app = express();
 app.use(express.json());
@@ -14,10 +23,6 @@ const multer = require('multer');
 const upload = multer();
 
 
-const stream = require('stream');
-
-let port = 3001;
-
 
 let stdoutRawText = "";
 let stdoutText = "";
@@ -30,55 +35,30 @@ app.get('/getStdout', (req, res) => {
     res.send(stdoutText);
 });
 
-io.on('connection', (socket) => {});
+app.post('/sendInput', upload.none(), (req, res) => {
+    let {visitorId, command} = req.body;
 
-app.post('/api', upload.none(), (req, res) => {
-    let {visitorColor, visitorId, command, visitorColorContrast} = req.body;
+    let restart = false;
+    if(command == "restart server") {
+        stdoutRawText="";
+        mcServer.reset();
+        restart = true;
+    }
 
     let usageObject = req.body;
 
     usageObject.isUserInput = true;
 
-    let date = new Date();
-    
-    var timeString = date.toString().slice(16, 24);
-    let stringDate = date.toLocaleDateString("en-US").slice(0, 5) + " - " + timeString;
-
-    let a = "";
-
-    a += /* html */`
-    <br>
-    <br>
-    <span class="userInput" style="--color: ${visitorColor}; --contrast: ${visitorColorContrast}" title="${stringDate}">
-
-        [<div class="userName">${visitorId}</div>] => "<span class="command" style="user-select: all">${command}</span>"
-
-    </span>
-    <br>`;
-
     stdoutRawText += `stopt{${JSON.stringify(usageObject)}}enopt [${visitorId}] ${command}\r\n`;
-    sendMessage(req.body.command);
+    if(!restart) mcServer.input(req.body.command);
 });
 
-server.listen(port, () => console.log(`Listening on port ${port}`));
+io.on('connection', (socket) => {});
 
-const sendMessage = (t) => {
-    var stdinStream = new stream.Readable({ read() { } });
-    stdinStream.push(t + '\n'); 
-    stdinStream.pipe(terminal.stdin);
-}
+server.listen(remoteTerminalPort, () => console.log(`Remote Terminal in port: ${remoteTerminalPort}`));
 
-const { spawn } = require('child_process');
-
-const terminal = spawn('./server/bedrock_server.exe');
-    
-terminal.stdin.setEncoding('utf-8');
-terminal.stdout.pipe(process.stdout);
-
-
-terminal.stdout.on('data', (data) => { 
-    let fullText = data.toString();
-    stdoutRawText += fullText
+mcServer.output(data => { 
+    stdoutRawText += data
         .replaceAll("&","&amp")
         .replaceAll("<","&lt")
         .replaceAll(">","&gt");
@@ -92,7 +72,7 @@ terminal.stdout.on('data', (data) => {
                 .replace("stopt{", "")
                 .replace("}enopt ", "");
                 
-                userObject = JSON.parse(obj);
+            userObject = JSON.parse(obj);
 
             s = s.replace(matchUsr[0],"");
         } 
@@ -100,9 +80,15 @@ terminal.stdout.on('data', (data) => {
         let match = s.match(/^\[.*] /gm);
         if(!match) return s+"<BR>";
 
+
         let title = match[0].slice(1, match[0].length-2)
 
         let text = s.replace(match[0], "");
+
+
+        if(title.includes("INFO") && text == "Server started.")
+            serverStarted();
+
         let html = /* html */ `
             <span class="userInput">
                 [<div class="title">${title} </div> <span>] ${text? "~> "+text: ""}</span>
@@ -131,7 +117,84 @@ terminal.stdout.on('data', (data) => {
 });
 
 
+let serverStartedBool = false;
+const serverStarted = () => {
+    if(serverStartedBool) return;
+    serverStartedBool = true;
 
-terminal.on('exit', (code) => {
-    console.log(`Child exited with code ${code}`);
-});
+    //relayOnStart();
+}
+
+
+
+const { Relay } = require('bedrock-protocol')
+
+const relayOnStart = () => {
+    console.log("Relay started");
+    const relay = new Relay({
+        /* host and port to listen for clients on */
+        host: mcServerIp,
+        port: mcServerPort,
+        maxPlayers: 100,
+        offline: true,
+        /* Where to send upstream packets to */
+        destination: {
+            host: mcServerIp,
+            port: mcServerRelayPort
+        }
+    })
+    relay.listen() // Tell the server to start listening.
+    
+    let methods = []; 
+    
+    relay.on('connect', player => {
+        //console.log(player);
+        console.log('New connection', player.connection.address)
+    
+        // Server is sending a message to the client.
+        player.on('clientbound', ({ name, params }, des) => {
+            if (name === 'disconnect') { // Intercept kick
+                params.message = 'Intercepted' // Change kick message to "Intercepted"
+            }
+        })
+        // Client is sending a message to the server
+    
+        player.on('serverbound', (evt, des) => {
+            let { name, params } = evt; 
+    
+            if(!methods.includes(name)) {
+                methods.push(name);
+                //console.log(name);
+            }
+    
+            if(name == "move_player") {
+                // params.position.x / y / z  
+            }
+        
+            if (name === 'text') { // Intercept chat message to server and append time.
+                console.log(params.message);
+                if(params.message.startsWith(";")){
+                    let command = params.message.slice(1);
+
+                    
+                    let restart = false;
+                    if(command == "restart server") {
+                        stdoutRawText="";
+                        mcServer.reset();
+                        restart = true;
+                    }
+
+                    stdoutRawText += `[from relay] ${command}\r\n`;
+                    if(!restart) mcServer.input(command);
+                }
+                params.message += `, on ${new Date().toLocaleString()}` 
+            }
+            
+            if (name === 'command_request') { // Intercept command request to server and cancel if its "/test"
+                if (params.command == "/test") {
+                des.canceled = true
+                } 
+            }
+        })
+    })
+}
