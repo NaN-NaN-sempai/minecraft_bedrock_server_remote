@@ -1,6 +1,5 @@
 let mcServerIp = '100.93.51.24';
 let mcServerPort = 19132;
-let mcServerRelayPort = 3002;
 let remoteTerminalPort = 3001;
 
 const mcterminal = require("./module/mcterminal");
@@ -86,8 +85,8 @@ mcServer.output(data => {
         let text = s.replace(match[0], "");
 
 
-        if(title.includes("INFO") && text == "Server started.")
-            serverStarted();
+        if(text == "Server started.")
+            onServerReady();
 
         let html = /* html */ `
             <span class="userInput">
@@ -117,84 +116,92 @@ mcServer.output(data => {
 });
 
 
+let onServerReadyList = {};
 let serverStartedBool = false;
-const serverStarted = () => {
+const onServerReady = () => {
     if(serverStartedBool) return;
     serverStartedBool = true;
 
-    //relayOnStart();
+    Object.keys(onServerReadyList).forEach(name => {
+        console.log(`On Server Ready: Running ${name}...`);
+        onServerReadyList[name]();
+        console.log(`On Server Ready: ${name} done.`);
+    })
 }
 
 
+/* 
+    USE CLIENT INSTEAD
+*/
 
-const { Relay } = require('bedrock-protocol')
+const bedrock = require('bedrock-protocol');
 
-const relayOnStart = () => {
-    console.log("Relay started");
-    const relay = new Relay({
-        /* host and port to listen for clients on */
-        host: mcServerIp,
-        port: mcServerPort,
-        maxPlayers: 100,
-        offline: true,
-        /* Where to send upstream packets to */
-        destination: {
-            host: mcServerIp,
-            port: mcServerRelayPort
+let playerList = [];
+
+// STU stands to Server Tool User
+onServerReadyList.loginSTU = () => {
+    let clientUsername = "NWS STU";
+    const client = bedrock.createClient({
+        host: mcServerIp,   // optional
+        port: mcServerPort,         // optional, default 19132
+        username: clientUsername,   // the username you want to join as, optional if online mode
+        offline: true       // optional, default false. if true, do not login with Xbox Live. You will not be asked to sign-in if set to true.
+    })
+
+    const sendCommand = (title, command) => {
+        stdoutRawText += `[NWS STU - ${title}] ${command}\r\n`;
+        mcServer.input(command);
+    }
+
+    
+
+    client.on('spawn', (packet) => {
+        sendCommand("Setup - Gamemode", `gamemode spectator "${clientUsername}"`);
+        sendCommand("Setup - Teleport", `tp "${clientUsername}" 12093 66 1412`);
+    })
+
+    client.on('text', (packet) => { // Listen for chat messages from the server and echo them back.
+        if (packet.source_name != client.username) {
+            if(packet.message.startsWith(":")){
+                let command = packet.message.slice(1);
+                sendCommand("User Command", command);
+                client.queue('text', {
+                    type: 'chat', needs_translation: false, source_name: client.username, xuid: '', platform_chat_id: '',
+                    message: `Command sent!`
+                })
+            }
         }
-    })
-    relay.listen() // Tell the server to start listening.
-    
-    let methods = []; 
-    
-    relay.on('connect', player => {
-        //console.log(player);
-        console.log('New connection', player.connection.address)
-    
-        // Server is sending a message to the client.
-        player.on('clientbound', ({ name, params }, des) => {
-            if (name === 'disconnect') { // Intercept kick
-                params.message = 'Intercepted' // Change kick message to "Intercepted"
-            }
-        })
-        // Client is sending a message to the server
-    
-        player.on('serverbound', (evt, des) => {
-            let { name, params } = evt; 
-    
-            if(!methods.includes(name)) {
-                methods.push(name);
-                //console.log(name);
-            }
-    
-            if(name == "move_player") {
-                // params.position.x / y / z  
-            }
-        
-            if (name === 'text') { // Intercept chat message to server and append time.
-                console.log(params.message);
-                if(params.message.startsWith(";")){
-                    let command = params.message.slice(1);
+    });
 
-                    
-                    let restart = false;
-                    if(command == "restart server") {
-                        stdoutRawText="";
-                        mcServer.reset();
-                        restart = true;
-                    }
+    client.on("player_list", packet => { 
+        if (packet.records.records[0].username != client.username) {
+            if(packet.records.type == "add"){
+                let {username, uuid} = packet.records.records[0];
+                
+                let find =  playerList.find(p => p.uuid == uuid);
 
-                    stdoutRawText += `[from relay] ${command}\r\n`;
-                    if(!restart) mcServer.input(command);
+                if(!find){
+                    playerList.push({
+                        username,
+                        uuid,
+                        online: true
+                    });
+                } else {
+                    let index = playerList.findIndex(p => p.uuid == uuid);
+
+                    playerList[index].online = true;
+
                 }
-                params.message += `, on ${new Date().toLocaleString()}` 
-            }
-            
-            if (name === 'command_request') { // Intercept command request to server and cancel if its "/test"
-                if (params.command == "/test") {
-                des.canceled = true
-                } 
-            }
-        })
-    })
+
+            } else if (packet.records.type == "remove") {
+                let {uuid} = packet.records.records[0];
+                
+                let index = playerList.findIndex(p => p.uuid == uuid);
+
+                if(index != -1) {
+                    playerList[index].online = false;
+                }
+            } 
+        }
+    });
 }
